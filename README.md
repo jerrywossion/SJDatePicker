@@ -1,3 +1,5 @@
 # SJDatePicker
 
-A description of this package.
+A date picker supporting range selection for AppKit/macOS.
+
+![ScreenShot](screenshot.png)
