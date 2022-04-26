@@ -1,6 +1,6 @@
 //
 //  TimePickerView.swift
-//  
+//
 //
 //  Created by Jie Weng on 2022/4/8.
 //
@@ -41,7 +41,7 @@ class TimePickerView: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        return datePicker.sizeThatFits(.zero)
+        datePicker.sizeThatFits(.zero)
     }
 
     @objc func onTimeChanged(_ sender: NSDatePicker) {

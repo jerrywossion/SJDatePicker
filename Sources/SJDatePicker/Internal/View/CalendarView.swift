@@ -48,7 +48,7 @@ class CalendarView: NSView {
     }
 
     init(date: Date) {
-        self.displayingDate = date
+        displayingDate = date
         self.date = date
 
         super.init(frame: .zero)
@@ -58,15 +58,13 @@ class CalendarView: NSView {
 
         header.onPrev = { [weak self] in
             if let self = self,
-               let date = Calendar.current.date(byAdding: .month, value: -1, to: self.displayingDate)
-            {
+               let date = Calendar.current.date(byAdding: .month, value: -1, to: self.displayingDate) {
                 self.displayingDate = date
             }
         }
         header.onNext = { [weak self] in
             if let self = self,
-               let date = Calendar.current.date(byAdding: .month, value: 1, to: self.displayingDate)
-            {
+               let date = Calendar.current.date(byAdding: .month, value: 1, to: self.displayingDate) {
                 self.displayingDate = date
             }
         }
@@ -160,8 +158,7 @@ class CalendarView: NSView {
         }
         collectionView.reloadData()
         if let date = date,
-           let item = dates.firstIndex(where: { Calendar.current.isDate(date, inSameDayAs: $0) })
-        {
+           let item = dates.firstIndex(where: { Calendar.current.isDate(date, inSameDayAs: $0) }) {
             DispatchQueue.main.async {
                 self.collectionView.selectItems(at: [IndexPath(item: item, section: 0)], scrollPosition: .top)
             }
@@ -259,8 +256,7 @@ class CalendarCollectionView: NSCollectionView {
         let point = convert(event.locationInWindow, from: nil)
         if let indexPath = indexPathForItem(at: point),
            let item = item(at: indexPath) as? DayItem,
-           item.isSelected
-        {
+           item.isSelected {
             deselectItems(at: [indexPath])
             selectItems(at: [indexPath], scrollPosition: .top)
             delegate?.collectionView?(self, didSelectItemsAt: [indexPath])

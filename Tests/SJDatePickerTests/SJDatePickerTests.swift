@@ -1,5 +1,5 @@
-import XCTest
 @testable import SJDatePicker
+import XCTest
 
 final class SJDatePickerTests: XCTestCase {
     func testExample() throws {

@@ -1,6 +1,6 @@
 //
 //  CalendarHeader.swift
-//  
+//
 //
 //  Created by Jie Weng on 2022/4/5.
 //
@@ -51,6 +51,7 @@ class CalendarHeader: NSView {
         }
     }
 
+    @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }

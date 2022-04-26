@@ -12,7 +12,7 @@ class DatePickerViewController: NSViewController {
     private let datePickerView: SJDatePickerView
     private var cancellableSet = Set<AnyCancellable>()
 
-    var date: AnyPublisher<SJDatePicker.DateType, Never> {
+    var date: AnyPublisher<SJDatePicker.PickerDate, Never> {
         datePickerView.$date.eraseToAnyPublisher()
     }
 
@@ -24,9 +24,9 @@ class DatePickerViewController: NSViewController {
         datePickerView.intrinsicContentSize
     }
 
-    init(date: SJDatePicker.DateType) {
+    init(date: SJDatePicker.PickerDate) {
         datePickerView = SJDatePickerView(date: date)
-        datePickerView.setup(date: date)
+        datePickerView.reset(date: date)
 
         super.init(nibName: nil, bundle: nil)
     }

@@ -9,31 +9,31 @@ import Cocoa
 import Combine
 
 open class SJDatePicker {
-    public enum DateType {
+    public enum PickerDate {
         case single(Date)
         case range(ClosedRange<Date>)
     }
 
-    public var date: AnyPublisher<DateType, Never> {
-        vc.date
-    }
-    private var cancellableSet = Set<AnyCancellable>()
-    let vc: DatePickerViewController
+    private var modeCancellable: AnyCancellable?
+    private var dateCancellable: AnyCancellable?
+    private var datePickerVC: DatePickerViewController?
+    public init() {}
 
-    public init(date: DateType = .single(Date())) {
-        self.vc = DatePickerViewController(date: date)
-    }
-
-    public func show(relativeTo positioningRect: NSRect, of positioningView: NSView, preferredEdge: NSRectEdge) {
+    public func show(initDate: PickerDate, relativeTo positioningRect: NSRect, of positioningView: NSView, preferredEdge: NSRectEdge, onDateChanged: @escaping (PickerDate) -> Void) {
+        let vc = DatePickerViewController(date: initDate)
+        datePickerVC = vc
         let popover = NSPopover()
         popover.contentSize = vc.contentSize
         popover.contentViewController = vc
         popover.behavior = .transient
         popover.show(relativeTo: positioningRect, of: positioningView, preferredEdge: preferredEdge)
-        vc.mode.sink { [weak vc, weak popover] _ in
+        modeCancellable = vc.mode.sink { [weak vc, weak popover] _ in
             if let vc = vc {
                 popover?.contentSize = vc.contentSize
             }
-        }.store(in: &cancellableSet)
+        }
+        dateCancellable = vc.date.sink { date in
+            onDateChanged(date)
+        }
     }
 }

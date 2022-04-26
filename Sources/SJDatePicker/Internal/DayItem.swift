@@ -33,6 +33,7 @@ class DayItem: NSCollectionViewItem {
             label.stringValue = title ?? ""
         }
     }
+
     var isInRangeMode = false
 
     private(set) var isToday = false

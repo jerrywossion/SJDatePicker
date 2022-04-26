@@ -20,6 +20,8 @@ class SJDatePickerView: NSView {
         case endSelected
     }
 
+    // MARK: Views
+
     private let rangeToggle = NSButton()
     private let includesTimeToggle = NSButton()
     private let startCalendar: CalendarView
@@ -27,18 +29,37 @@ class SJDatePickerView: NSView {
     private let startTimePicker: TimePickerView
     private let endTimePicker: TimePickerView
 
-    @Published var date: SJDatePicker.DateType
+    // MARK: States
+
+    @Published var date: SJDatePicker.PickerDate
     @Published var mode: Mode
 
+    /// - Single mode: Selected date
+    /// - Range mode: Selected start date
     private var startDate: Date?
+    /// - Single mode: Selected time
+    /// - Range mode: Selected start time
     private var startTime: Date?
+    /// - Single mode: N/A
+    /// - Range mode: Selected end date
     private var endDate: Date?
+    /// - Single mode: N/A
+    /// - Range mode: Selected end time
     private var endTime: Date?
+
+    /// State machine for range mode
     @Published private var rangeState: RangeState = .unselected
-    @Published private var includesTime = false
-    private var isStartDateViewDateSetByUs = false
-    private var isEndDateViewDateSetByUs = false
+    private var includesTime: Bool {
+        includesTimeToggle.state == .on
+    }
+
+    private var isStartCalendarDateSetByUs = false
+    private var isStartTimeSetByUs = false
+    private var isEndCalendarDateSetByUs = false
+    private var isEndTimeSetByUs = false
     private var cancellableSet = Set<AnyCancellable>()
+
+    // MARK: Layout constants
 
     private let toggleHPadding: CGFloat = 10
     private let toggleHeight: CGFloat = 20
@@ -48,16 +69,16 @@ class SJDatePickerView: NSView {
     private let timePickerHeight: CGFloat = 24
     private let vPadding: CGFloat = 10
 
-    init(date: SJDatePicker.DateType) {
+    init(date: SJDatePicker.PickerDate) {
         self.date = date
         switch date {
-        case .single(let date):
+        case let .single(date):
             startCalendar = CalendarView(date: date)
             endCalendar = CalendarView(date: date)
             startTimePicker = TimePickerView(time: date)
             endTimePicker = TimePickerView(time: date)
             mode = .single
-        case .range(let dateRange):
+        case let .range(dateRange):
             startCalendar = CalendarView(date: dateRange.lowerBound)
             endCalendar = CalendarView(date: dateRange.upperBound)
             startCalendar.highlightedRange = (dateRange.lowerBound, dateRange.upperBound)
@@ -71,6 +92,23 @@ class SJDatePickerView: NSView {
         }
         super.init(frame: .zero)
 
+        setupSubviews()
+        updateDateViewLayouts(with: mode)
+        updateTimePickersVisibility()
+        setupStateSubscribers()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func updateLayer() {
+        super.updateLayer()
+        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+    }
+
+    private func setupSubviews() {
         wantsLayer = true
 
         setupToggle(rangeToggle, title: "Choose range of date", action: #selector(onToggleDateRange(_:)))
@@ -93,19 +131,6 @@ class SJDatePickerView: NSView {
             make.height.equalTo(toggleHeight)
             make.top.equalTo(rangeToggle.snp.bottom)
         }
-        updateDateViewLayouts(with: mode)
-
-        setupStateSubscribers()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func updateLayer() {
-        super.updateLayer()
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
 
     private func setupToggle(_ button: NSButton, title: String, action: Selector) {
@@ -120,15 +145,15 @@ class SJDatePickerView: NSView {
     private func setupStateSubscribers() {
         startCalendar.$date.sink { [weak self] in
             guard let self = self else { return }
-            guard !self.isStartDateViewDateSetByUs else {
-                self.isStartDateViewDateSetByUs = false
+            guard !self.isStartCalendarDateSetByUs else {
+                self.isStartCalendarDateSetByUs = false
                 return
             }
             switch self.mode {
             case .single:
                 if let date = $0 {
                     self.startDate = date
-                    self.updateDate()
+                    self.updatePickerDateTime()
                 }
             case .range:
                 if let date = $0 {
@@ -140,8 +165,8 @@ class SJDatePickerView: NSView {
         endCalendar.$date.sink { [weak self] in
             guard let self = self,
                   self.mode == .range else { return }
-            guard !self.isEndDateViewDateSetByUs else {
-                self.isEndDateViewDateSetByUs = false
+            guard !self.isEndCalendarDateSetByUs else {
+                self.isEndCalendarDateSetByUs = false
                 return
             }
             if let date = $0 {
@@ -161,17 +186,29 @@ class SJDatePickerView: NSView {
             self.onRangeStateChange(to: state)
         }.store(in: &cancellableSet)
 
-        $includesTime.sink { [weak self] includesTime in
-            guard let self = self else { return }
-            self.startTimePicker.isHidden = !includesTime
-            self.endTimePicker.isHidden = !includesTime
-        }.store(in: &cancellableSet)
-
         startTimePicker.$time.sink { [weak self] time in
-            self?.startTime = time
+            guard let self = self else {
+                return
+            }
+            guard !self.isStartTimeSetByUs else {
+                self.isStartTimeSetByUs = false
+                return
+            }
+            self.startTime = time
+            self.updatePickerDateTime()
         }.store(in: &cancellableSet)
         endTimePicker.$time.sink { [weak self] time in
-            self?.endTime = time
+            guard let self = self,
+                  self.mode == .range
+            else {
+                return
+            }
+            guard !self.isEndTimeSetByUs else {
+                self.isEndTimeSetByUs = false
+                return
+            }
+            self.endTime = time
+            self.updatePickerDateTime()
         }.store(in: &cancellableSet)
     }
 
@@ -179,6 +216,7 @@ class SJDatePickerView: NSView {
         switch mode {
         case .single:
             endCalendar.isHidden = true
+            endTimePicker.isHidden = true
             startCalendar.snp.remakeConstraints { make in
                 make.centerX.equalToSuperview()
                 make.top.equalTo(includesTimeToggle.snp.bottom).offset(toggleCalendarSpacing)
@@ -189,6 +227,7 @@ class SJDatePickerView: NSView {
             }
         case .range:
             endCalendar.isHidden = false
+            endTimePicker.isHidden = true
             startCalendar.snp.remakeConstraints { make in
                 make.leading.equalToSuperview().offset(calendarHPadding)
                 make.top.equalTo(includesTimeToggle.snp.bottom).offset(toggleCalendarSpacing)
@@ -209,21 +248,30 @@ class SJDatePickerView: NSView {
     }
 
     @objc func onToggleDateRange(_ sender: NSButton) {
-        if sender.state == .on {
-            if case .single(let singleDate) = date {
-                startDate = singleDate
-                endDate = singleDate
-            }
-            rangeState = .endSelected
-        } else {
-            rangeState = .unselected
-        }
-        setup(date: date)
+        var date: SJDatePicker.PickerDate?
         mode = sender.state == .on ? .range : .single
+        switch mode {
+        case .single:
+            if case let .range(range) = self.date {
+                date = .single(range.lowerBound)
+            }
+        case .range:
+            if case let .single(single) = self.date {
+                date = .range(single ... single)
+            }
+        }
+        if let date = date {
+            reset(date: date)
+        }
+    }
+
+    private func updateTimePickersVisibility() {
+        startTimePicker.isHidden = !includesTime
+        endTimePicker.isHidden = !includesTime
     }
 
     @objc func onToggleIncludesTime(_ sender: NSButton) {
-        includesTime = sender.state == .on
+        updateTimePickersVisibility()
     }
 
     override var intrinsicContentSize: NSSize {
@@ -241,19 +289,45 @@ class SJDatePickerView: NSView {
 
     // MARK: - Date & Time Operations
 
-    func setup(date: SJDatePicker.DateType) {
+    func reset(date: SJDatePicker.PickerDate) {
         self.date = date
         switch date {
-        case .single(let date):
+        case let .single(date):
+            isStartCalendarDateSetByUs = true
             startCalendar.date = date
+            isStartTimeSetByUs = true
             startTimePicker.time = date
-        case .range(let range):
+            startDate = date
+            startTime = date
+            mode = .single
+            startCalendar.isInRangeMode = false
+            if rangeToggle.state != .off {
+                rangeToggle.state = .off
+            }
+        case let .range(range):
+            isStartCalendarDateSetByUs = true
             startCalendar.date = range.lowerBound
+            isStartTimeSetByUs = true
+            startTimePicker.time = range.lowerBound
+            isEndCalendarDateSetByUs = true
             endCalendar.date = range.upperBound
+            isEndTimeSetByUs = true
+            endTimePicker.time = range.upperBound
+            startDate = range.lowerBound
+            startTime = range.lowerBound
+            endDate = range.upperBound
+            endTime = range.upperBound
+            mode = .range
+            if rangeToggle.state != .on {
+                rangeToggle.state = .on
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.rangeState = .endSelected
+            }
         }
     }
 
-    func combineDateTime(date: Date, time: Date) -> Date? {
+    private func combineDateTime(date: Date, time: Date) -> Date? {
         let calendar = Calendar.current
         let dateComponents = calendar.dateComponents([.year, .month, .day], from: date)
         let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
@@ -277,7 +351,7 @@ class SJDatePickerView: NSView {
         return resDate
     }
 
-    func updateDate() {
+    private func updatePickerDateTime() {
         switch mode {
         case .single:
             guard let startDate = startDate else {
@@ -285,8 +359,7 @@ class SJDatePickerView: NSView {
             }
             if includesTime,
                let startTime = startTime,
-               let combinedDate = combineDateTime(date: startDate, time: startTime)
-            {
+               let combinedDate = combineDateTime(date: startDate, time: startTime) {
                 date = .single(combinedDate)
             } else {
                 date = .single(startDate)
@@ -302,8 +375,7 @@ class SJDatePickerView: NSView {
                let startTime = startTime,
                let endTime = endTime,
                let combinedStartDate = combineDateTime(date: startDate, time: startTime),
-               let combinedEndDate = combineDateTime(date: endDate, time: endTime)
-            {
+               let combinedEndDate = combineDateTime(date: endDate, time: endTime) {
                 date = .range(combinedStartDate ... combinedEndDate)
             } else {
                 date = .range(startDate ... endDate)
@@ -323,7 +395,7 @@ class SJDatePickerView: NSView {
             if startDate <= date {
                 endDate = date
                 rangeState = .endSelected
-                updateDate()
+                updatePickerDateTime()
             } else {
                 self.startDate = date
                 rangeState = .startSelected
@@ -338,10 +410,10 @@ class SJDatePickerView: NSView {
     private func onRangeStateChange(to state: RangeState) {
         switch state {
         case .unselected:
-            isStartDateViewDateSetByUs = true
+            isStartCalendarDateSetByUs = true
             startCalendar.date = nil
             startCalendar.highlightedRange = nil
-            isEndDateViewDateSetByUs = true
+            isEndCalendarDateSetByUs = true
             endCalendar.date = nil
             endCalendar.highlightedRange = nil
         case .startSelected:
